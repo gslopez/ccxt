@@ -51,6 +51,8 @@ class kraken (Exchange):
                 'fetchOpenOrders': True,
                 'fetchClosedOrders': True,
                 'fetchMyTrades': True,
+                'fetchWithdrawals': True,
+                'fetchDeposits': True,
                 'withdraw': True,
             },
             'marketsByAltname': {},
@@ -691,6 +693,44 @@ class kraken (Exchange):
             # 'trades': self.parse_trades(order['trades'], market),
         }
 
+    def parse_transaction(self, transaction, currency, type):
+        id = transaction['refid']
+        txid = transaction['txid']
+        timestamp = int(transaction['time'] * 1000)
+        # type = None  # 'withdrawal' or 'deposit'
+        amount = self.safe_float(transaction, 'amount')
+        fee = self.safe_float(transaction, 'fee')
+        status = transaction['status']
+        return {
+            'info': transaction,
+            'id': id,
+            'txid': txid,  # ?
+            'timestamp': timestamp,
+            'datetime': self.iso8601(timestamp),
+            'address': None,
+            'tag': None,
+            'type': type,
+            'amount': amount,
+            'currency': currency,
+            'status': status,
+            'updated': None,
+            'fee': {
+                'currency': currency,
+                'cost': fee,
+                'rate': None,
+            },
+        }
+
+    def parse_transactions(self, transactions, currencyCode=None, type=None, since=None, limit=None):
+        result = []
+        for i in range(0, len(transactions)):
+            transaction = transactions[i]
+            newTransaction = self.parse_transaction(transaction, currencyCode, type)
+            result.append(newTransaction)
+        result = self.sort_by(result, 'timestamp')
+        code = currencyCode
+        return self.filterByCurrencySinceLimit(result, code, since, limit)
+
     def parse_orders(self, orders, market=None, since=None, limit=None):
         result = []
         ids = list(orders.keys())
@@ -775,6 +815,24 @@ class kraken (Exchange):
             'asset': currency['id'],
         }, params))
         return response['result']
+
+    def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
+        self.load_markets()
+        currency = self.currency(code)
+        response = self.privatePostWithdrawStatus(self.extend({
+            'asset': currency['id'],
+        }, params))
+        result = response['result']
+        return self.parse_transactions(result, code, 'withdrawal')
+
+    def fetch_deposits(self, code=None, since=None, limit=None, params={}):
+        self.load_markets()
+        currency = self.currency(code)
+        response = self.privatePostDepositStatus(self.extend({
+            'asset': currency['id'],
+        }, params))
+        result = response['result']
+        return self.parse_transactions(result, code, 'deposit')
 
     def create_deposit_address(self, code, params={}):
         request = {

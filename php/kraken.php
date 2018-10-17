@@ -30,6 +30,8 @@ class kraken extends Exchange {
                 'fetchOpenOrders' => true,
                 'fetchClosedOrders' => true,
                 'fetchMyTrades' => true,
+                'fetchWithdrawals' => true,
+                'fetchDeposits' => true,
                 'withdraw' => true,
             ),
             'marketsByAltname' => array (),
@@ -714,6 +716,47 @@ class kraken extends Exchange {
         );
     }
 
+    public function parse_transaction ($transaction, $currency, $type) {
+        $id = $transaction['refid'];
+        $txid = $transaction['txid'];
+        $timestamp = intval ($transaction['time'] * 1000);
+        // $type = null; // 'withdrawal' or 'deposit'
+        $amount = $this->safe_float($transaction, 'amount');
+        $fee = $this->safe_float($transaction, 'fee');
+        $status = $transaction['status'];
+        return array (
+            'info' => $transaction,
+            'id' => $id,
+            'txid' => $txid, // ?
+            'timestamp' => $timestamp,
+            'datetime' => $this->iso8601 ($timestamp),
+            'address' => null,
+            'tag' => null,
+            'type' => $type,
+            'amount' => $amount,
+            'currency' => $currency,
+            'status' => $status,
+            'updated' => null,
+            'fee' => array (
+                'currency' => $currency,
+                'cost' => $fee,
+                'rate' => null,
+            ),
+        );
+    }
+
+    public function parse_transactions ($transactions, $currencyCode = null, $type = null, $since = null, $limit = null) {
+        $result = array ();
+        for ($i = 0; $i < count ($transactions); $i++) {
+            $transaction = $transactions[$i];
+            $newTransaction = $this->parse_transaction ($transaction, $currencyCode, $type);
+            $result[] = $newTransaction;
+        }
+        $result = $this->sort_by($result, 'timestamp');
+        $code = $currencyCode;
+        return $this->filterByCurrencySinceLimit ($result, $code, $since, $limit);
+    }
+
     public function parse_orders ($orders, $market = null, $since = null, $limit = null) {
         $result = array ();
         $ids = is_array ($orders) ? array_keys ($orders) : array ();
@@ -807,6 +850,26 @@ class kraken extends Exchange {
             'asset' => $currency['id'],
         ), $params));
         return $response['result'];
+    }
+
+    public function fetch_withdrawals ($code = null, $since = null, $limit = null, $params = array ()) {
+        $this->load_markets();
+        $currency = $this->currency ($code);
+        $response = $this->privatePostWithdrawStatus (array_merge (array (
+            'asset' => $currency['id'],
+        ), $params));
+        $result = $response['result'];
+        return $this->parse_transactions ($result, $code, 'withdrawal');
+    }
+
+    public function fetch_deposits ($code = null, $since = null, $limit = null, $params = array ()) {
+        $this->load_markets();
+        $currency = $this->currency ($code);
+        $response = $this->privatePostDepositStatus (array_merge (array (
+            'asset' => $currency['id'],
+        ), $params));
+        $result = $response['result'];
+        return $this->parse_transactions ($result, $code, 'deposit');
     }
 
     public function create_deposit_address ($code, $params = array ()) {
