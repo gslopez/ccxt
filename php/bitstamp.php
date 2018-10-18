@@ -413,7 +413,7 @@ class bitstamp extends Exchange {
         if ($code) {
             for ($i = 0; $i < count ($response); $i++) {
                 $withdrawal = $response[$i];
-                if (strtolower ($withdrawal->currency) === strtolower ($code)) {
+                if (strtolower ($withdrawal['currency']) === strtolower ($code)) {
                     $result->append ($withdrawal);
                 }
             }

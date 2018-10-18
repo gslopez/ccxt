@@ -396,7 +396,7 @@ class bitstamp (Exchange):
         if code:
             for i in range(0, len(response)):
                 withdrawal = response[i]
-                if withdrawal.currency.lower() == code.lower():
+                if withdrawal['currency'].lower() == code.lower():
                     result.append(withdrawal)
         else:
             result = response
