@@ -412,7 +412,7 @@ module.exports = class bitstamp extends Exchange {
         if (code) {
             for (let i = 0; i < response.length; i++) {
                 let withdrawal = response[i];
-                if (withdrawal.currency.toLowerCase () === code.toLowerCase ()) {
+                if (withdrawal['currency'].toLowerCase () === code.toLowerCase ()) {
                     result.append (withdrawal);
                 }
             }
