@@ -23,6 +23,7 @@ class bitstamp extends Exchange {
                 'fetchOpenOrders' => true,
                 'fetchMyTrades' => true,
                 'fetchTransactions' => true,
+                'fetchWithdrawals' => true,
                 'withdraw' => true,
             ),
             'urls' => array (
@@ -258,11 +259,15 @@ class bitstamp extends Exchange {
         //         "eur" => 0.0
         //     }
         //
+        if (is_array ($transaction) && array_key_exists ('currency', $transaction)) {
+            return strtolower ($transaction['currency']);
+        }
         $transaction = $this->omit ($transaction, array (
             'fee',
             'price',
             'datetime',
             'type',
+            'status',
             'id',
         ));
         $ids = is_array ($transaction) ? array_keys ($transaction) : array ();
@@ -395,6 +400,43 @@ class bitstamp extends Exchange {
             'time' => 'hour',
         ), $params));
         return $this->parse_trades($response, $market, $since, $limit);
+    }
+
+    public function fetch_withdrawals ($code = null, $since = null, $limit = null, $params = array ()) {
+        $this->load_markets();
+        $timedelta = null;
+        if ($since) {
+            $timedelta = $this->milliseconds () - $since;
+        }
+        $response = $this->privatePostWithdrawalRequests (array_merge (array ( 'timedelta' => $timedelta ), $params));
+        $result = array ();
+        if ($code) {
+            for ($i = 0; $i < count ($response); $i++) {
+                $withdrawal = $response[$i];
+                if (strtolower ($withdrawal->currency) === strtolower ($code)) {
+                    $result->append ($withdrawal);
+                }
+            }
+        } else {
+            $result = $response;
+        }
+        //   [ array ( status => 2,
+        //   datetime => '2018-10-17 10:58:13',
+        //   currency => 'BTC',
+        //   amount => '0.29669259',
+        //   address => 'aaaaa',
+        //   type => 1,
+        //   id => 111111,
+        //   transaction_id => 'xxxx' ),
+        // array ( status => 2,
+        //   datetime => '2018-10-17 10:55:17',
+        //   currency => 'ETH',
+        //   amount => '1.11010664',
+        //   address => 'aaaa',
+        //   type => 16,
+        //   id => 222222,
+        //   transaction_id => 'xxxxx' )]
+        return $this->parseTransactions ($response, $code, $since, $limit);
     }
 
     public function fetch_balance ($params = array ()) {
@@ -575,10 +617,15 @@ class bitstamp extends Exchange {
         } else if ($type === '1') {
             $type = 'withdrawal';
         }
-        return array (
+        $txid = null;
+        if (is_array ($transaction) && array_key_exists ('transaction_id', $transaction)) {
+            $txid = $transaction->transaction_id;
+        }
+        $status = $this->parse_transaction_status_by_type ($transaction->status);
+        $ret = array (
             'info' => $transaction,
             'id' => $id,
-            'txid' => null, // ?
+            'txid' => $txid, // ?
             'timestamp' => $timestamp,
             'datetime' => $this->iso8601 ($timestamp),
             'address' => null,
@@ -586,7 +633,7 @@ class bitstamp extends Exchange {
             'type' => $type,
             'amount' => $amount,
             'currency' => $code,
-            'status' => null,
+            'status' => $status,
             'updated' => null,
             'fee' => array (
                 'currency' => $feeCurrency,
@@ -594,6 +641,23 @@ class bitstamp extends Exchange {
                 'rate' => null,
             ),
         );
+        return $ret;
+    }
+
+    public function parse_transaction_status_by_type ($status) {
+        if ($status === null) {
+            return $status;
+        }
+        // withdrawals:
+        // 0 (open), 1 (in process), 2 (finished), 3 (canceled) or 4 (failed).
+        $statuses = array (
+            '0' => 'pending', // Open
+            '1' => 'pending', // In process
+            '2' => 'ok', // Finished
+            '3' => 'canceled', // Canceled
+            '4' => 'failed', // Failed
+        );
+        return (is_array ($statuses) && array_key_exists ($status, $statuses)) ? $statuses[$status] : $status;
     }
 
     public function parse_order ($order, $market = null) {

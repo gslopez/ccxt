@@ -258,7 +258,6 @@ module.exports = class bitstamp extends Exchange {
         //         "eur": 0.0
         //     }
         //
-
         if ('currency' in transaction) {
             return transaction['currency'].toLowerCase ();
         }
@@ -406,7 +405,7 @@ module.exports = class bitstamp extends Exchange {
         await this.loadMarkets ();
         let timedelta = undefined;
         if (since) {
-            timedelta = new Date ().getTime () - since;
+            timedelta = this.milliseconds () - since;
         }
         let response = await this.privatePostWithdrawalRequests (this.extend ({ 'timedelta': timedelta }, params));
         let result = [];

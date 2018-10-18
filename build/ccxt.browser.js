@@ -13934,6 +13934,7 @@ module.exports = class bitstamp extends Exchange {
                 'fetchOpenOrders': true,
                 'fetchMyTrades': true,
                 'fetchTransactions': true,
+                'fetchWithdrawals': true,
                 'withdraw': true,
             },
             'urls': {
@@ -14169,11 +14170,15 @@ module.exports = class bitstamp extends Exchange {
         //         "eur": 0.0
         //     }
         //
+        if ('currency' in transaction) {
+            return transaction['currency'].toLowerCase ();
+        }
         transaction = this.omit (transaction, [
             'fee',
             'price',
             'datetime',
             'type',
+            'status',
             'id',
         ]);
         let ids = Object.keys (transaction);
@@ -14306,6 +14311,43 @@ module.exports = class bitstamp extends Exchange {
             'time': 'hour',
         }, params));
         return this.parseTrades (response, market, since, limit);
+    }
+
+    async fetchWithdrawals (code = undefined, since = undefined, limit = undefined, params = {}) {
+        await this.loadMarkets ();
+        let timedelta = undefined;
+        if (since) {
+            timedelta = this.milliseconds () - since;
+        }
+        let response = await this.privatePostWithdrawalRequests (this.extend ({ 'timedelta': timedelta }, params));
+        let result = [];
+        if (code) {
+            for (let i = 0; i < response.length; i++) {
+                let withdrawal = response[i];
+                if (withdrawal.currency.toLowerCase () === code.toLowerCase ()) {
+                    result.append (withdrawal);
+                }
+            }
+        } else {
+            result = response;
+        }
+        //   [ { status: 2,
+        //   datetime: '2018-10-17 10:58:13',
+        //   currency: 'BTC',
+        //   amount: '0.29669259',
+        //   address: 'aaaaa',
+        //   type: 1,
+        //   id: 111111,
+        //   transaction_id: 'xxxx' },
+        // { status: 2,
+        //   datetime: '2018-10-17 10:55:17',
+        //   currency: 'ETH',
+        //   amount: '1.11010664',
+        //   address: 'aaaa',
+        //   type: 16,
+        //   id: 222222,
+        //   transaction_id: 'xxxxx' }]
+        return this.parseTransactions (response, code, since, limit);
     }
 
     async fetchBalance (params = {}) {
@@ -14486,10 +14528,15 @@ module.exports = class bitstamp extends Exchange {
         } else if (type === '1') {
             type = 'withdrawal';
         }
-        return {
+        let txid = undefined;
+        if ('transaction_id' in transaction) {
+            txid = transaction.transaction_id;
+        }
+        let status = this.parseTransactionStatusByType (transaction.status);
+        let ret = {
             'info': transaction,
             'id': id,
-            'txid': undefined, // ?
+            'txid': txid, // ?
             'timestamp': timestamp,
             'datetime': this.iso8601 (timestamp),
             'address': undefined,
@@ -14497,7 +14544,7 @@ module.exports = class bitstamp extends Exchange {
             'type': type,
             'amount': amount,
             'currency': code,
-            'status': undefined,
+            'status': status,
             'updated': undefined,
             'fee': {
                 'currency': feeCurrency,
@@ -14505,6 +14552,23 @@ module.exports = class bitstamp extends Exchange {
                 'rate': undefined,
             },
         };
+        return ret;
+    }
+
+    parseTransactionStatusByType (status) {
+        if (status === undefined) {
+            return status;
+        }
+        // withdrawals:
+        // 0 (open), 1 (in process), 2 (finished), 3 (canceled) or 4 (failed).
+        let statuses = {
+            '0': 'pending', // Open
+            '1': 'pending', // In process
+            '2': 'ok', // Finished
+            '3': 'canceled', // Canceled
+            '4': 'failed', // Failed
+        };
+        return (status in statuses) ? statuses[status] : status;
     }
 
     parseOrder (order, market = undefined) {

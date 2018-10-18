@@ -35,6 +35,7 @@ class bitstamp (Exchange):
                 'fetchOpenOrders': True,
                 'fetchMyTrades': True,
                 'fetchTransactions': True,
+                'fetchWithdrawals': True,
                 'withdraw': True,
             },
             'urls': {
@@ -265,11 +266,14 @@ class bitstamp (Exchange):
         #         "eur": 0.0
         #     }
         #
+        if 'currency' in transaction:
+            return transaction['currency'].lower()
         transaction = self.omit(transaction, [
             'fee',
             'price',
             'datetime',
             'type',
+            'status',
             'id',
         ])
         ids = list(transaction.keys())
@@ -381,6 +385,38 @@ class bitstamp (Exchange):
             'time': 'hour',
         }, params))
         return self.parse_trades(response, market, since, limit)
+
+    async def fetch_withdrawals(self, code=None, since=None, limit=None, params={}):
+        await self.load_markets()
+        timedelta = None
+        if since:
+            timedelta = self.milliseconds() - since
+        response = await self.privatePostWithdrawalRequests(self.extend({'timedelta': timedelta}, params))
+        result = []
+        if code:
+            for i in range(0, len(response)):
+                withdrawal = response[i]
+                if withdrawal.currency.lower() == code.lower():
+                    result.append(withdrawal)
+        else:
+            result = response
+        #   [{status: 2,
+        #   datetime: '2018-10-17 10:58:13',
+        #   currency: 'BTC',
+        #   amount: '0.29669259',
+        #   address: 'aaaaa',
+        #   type: 1,
+        #   id: 111111,
+        #   transaction_id: 'xxxx'},
+        # {status: 2,
+        #   datetime: '2018-10-17 10:55:17',
+        #   currency: 'ETH',
+        #   amount: '1.11010664',
+        #   address: 'aaaa',
+        #   type: 16,
+        #   id: 222222,
+        #   transaction_id: 'xxxxx'}]
+        return self.parseTransactions(response, code, since, limit)
 
     async def fetch_balance(self, params={}):
         await self.load_markets()
@@ -541,10 +577,14 @@ class bitstamp (Exchange):
             type = 'deposit'
         elif type == '1':
             type = 'withdrawal'
-        return {
+        txid = None
+        if 'transaction_id' in transaction:
+            txid = transaction.transaction_id
+        status = self.parse_transaction_status_by_type(transaction.status)
+        ret = {
             'info': transaction,
             'id': id,
-            'txid': None,  # ?
+            'txid': txid,  # ?
             'timestamp': timestamp,
             'datetime': self.iso8601(timestamp),
             'address': None,
@@ -552,7 +592,7 @@ class bitstamp (Exchange):
             'type': type,
             'amount': amount,
             'currency': code,
-            'status': None,
+            'status': status,
             'updated': None,
             'fee': {
                 'currency': feeCurrency,
@@ -560,6 +600,21 @@ class bitstamp (Exchange):
                 'rate': None,
             },
         }
+        return ret
+
+    def parse_transaction_status_by_type(self, status):
+        if status is None:
+            return status
+        # withdrawals:
+        # 0(open), 1(in process), 2(finished), 3(canceled) or 4(failed).
+        statuses = {
+            '0': 'pending',  # Open
+            '1': 'pending',  # In process
+            '2': 'ok',  # Finished
+            '3': 'canceled',  # Canceled
+            '4': 'failed',  # Failed
+        }
+        return statuses[status] if (status in list(statuses.keys())) else status
 
     def parse_order(self, order, market=None):
         id = self.safe_string(order, 'id')
