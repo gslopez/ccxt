@@ -393,7 +393,9 @@ class bitstamp (Exchange):
             timedelta = self.milliseconds() - since
         response = self.privatePostWithdrawalRequests(self.extend({'timedelta': timedelta}, params))
         result = []
+        currency = None
         if code:
+            currency = self.currency(code)
             for i in range(0, len(response)):
                 withdrawal = response[i]
                 if withdrawal['currency'].lower() == code.lower():
@@ -416,7 +418,7 @@ class bitstamp (Exchange):
         #   type: 16,
         #   id: 222222,
         #   transaction_id: 'xxxxx'}]
-        return self.parseTransactions(response, code, since, limit)
+        return self.parseTransactions(response, currency, since, limit)
 
     def fetch_balance(self, params={}):
         self.load_markets()
@@ -579,8 +581,8 @@ class bitstamp (Exchange):
             type = 'withdrawal'
         txid = None
         if 'transaction_id' in transaction:
-            txid = transaction.transaction_id
-        status = self.parse_transaction_status_by_type(transaction.status)
+            txid = transaction['transaction_id']
+        status = self.parse_transaction_status_by_type(transaction['status'])
         ret = {
             'info': transaction,
             'id': id,

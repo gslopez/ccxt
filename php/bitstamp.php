@@ -410,7 +410,9 @@ class bitstamp extends Exchange {
         }
         $response = $this->privatePostWithdrawalRequests (array_merge (array ( 'timedelta' => $timedelta ), $params));
         $result = array ();
+        $currency = null;
         if ($code) {
+            $currency = $this->currency ($code);
             for ($i = 0; $i < count ($response); $i++) {
                 $withdrawal = $response[$i];
                 if (strtolower ($withdrawal['currency']) === strtolower ($code)) {
@@ -422,7 +424,7 @@ class bitstamp extends Exchange {
         }
         //   [ array ( status => 2,
         //   datetime => '2018-10-17 10:58:13',
-        //   currency => 'BTC',
+        //   $currency => 'BTC',
         //   amount => '0.29669259',
         //   address => 'aaaaa',
         //   type => 1,
@@ -430,13 +432,13 @@ class bitstamp extends Exchange {
         //   transaction_id => 'xxxx' ),
         // array ( status => 2,
         //   datetime => '2018-10-17 10:55:17',
-        //   currency => 'ETH',
+        //   $currency => 'ETH',
         //   amount => '1.11010664',
         //   address => 'aaaa',
         //   type => 16,
         //   id => 222222,
         //   transaction_id => 'xxxxx' )]
-        return $this->parseTransactions ($response, $code, $since, $limit);
+        return $this->parseTransactions ($response, $currency, $since, $limit);
     }
 
     public function fetch_balance ($params = array ()) {
@@ -619,9 +621,9 @@ class bitstamp extends Exchange {
         }
         $txid = null;
         if (is_array ($transaction) && array_key_exists ('transaction_id', $transaction)) {
-            $txid = $transaction->transaction_id;
+            $txid = $transaction['transaction_id'];
         }
-        $status = $this->parse_transaction_status_by_type ($transaction->status);
+        $status = $this->parse_transaction_status_by_type ($transaction['status']);
         $ret = array (
             'info' => $transaction,
             'id' => $id,
