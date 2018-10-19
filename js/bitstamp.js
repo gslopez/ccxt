@@ -490,10 +490,6 @@ module.exports = class bitstamp extends Exchange {
             'timestamp': timestamp,
             'info': response,
         };
-        return {
-            'info': response,
-            'id': response['id'],
-        };
     }
 
     async cancelOrder (id, symbol = undefined, params = {}) {
