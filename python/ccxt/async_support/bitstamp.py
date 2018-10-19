@@ -454,9 +454,18 @@ class bitstamp (Exchange):
             order['price'] = self.price_to_precision(symbol, price)
         method += 'Pair'
         response = await getattr(self, method)(self.extend(order, params))
+        timestamp = self.parse8601(self.safe_string(response, 'datetime'))
+        price = self.safe_float(response, 'price')
+        amount = self.safe_float(response, 'amount')
+        id = self.safe_string(response, 'id')
         return {
+            'price': price,
+            'amount': amount,
+            'type': type,
+            'id': id,
+            'datetime': self.iso8601(timestamp),
+            'timestamp': timestamp,
             'info': response,
-            'id': response['id'],
         }
 
     async def cancel_order(self, id, symbol=None, params={}):

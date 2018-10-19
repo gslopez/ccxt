@@ -478,9 +478,18 @@ class bitstamp extends Exchange {
         }
         $method .= 'Pair';
         $response = $this->$method (array_merge ($order, $params));
+        $timestamp = $this->parse8601 ($this->safe_string($response, 'datetime'));
+        $price = $this->safe_float($response, 'price');
+        $amount = $this->safe_float($response, 'amount');
+        $id = $this->safe_string($response, 'id');
         return array (
+            'price' => $price,
+            'amount' => $amount,
+            'type' => $type,
+            'id' => $id,
+            'datetime' => $this->iso8601 ($timestamp),
+            'timestamp' => $timestamp,
             'info' => $response,
-            'id' => $response['id'],
         );
     }
 

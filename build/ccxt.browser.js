@@ -14389,9 +14389,18 @@ module.exports = class bitstamp extends Exchange {
         }
         method += 'Pair';
         let response = await this[method] (this.extend (order, params));
+        let timestamp = this.parse8601 (this.safeString (response, 'datetime'));
+        price = this.safeFloat (response, 'price');
+        amount = this.safeFloat (response, 'amount');
+        let id = this.safeString (response, 'id');
         return {
+            'price': price,
+            'amount': amount,
+            'type': type,
+            'id': id,
+            'datetime': this.iso8601 (timestamp),
+            'timestamp': timestamp,
             'info': response,
-            'id': response['id'],
         };
     }
 
